@@ -6,6 +6,10 @@ Windows 素材工作台：链接下载、水印修复、小红书采集、Facebo
 
 <p align="center"><img src="source/assets/qingying-icon.png" width="180" alt="清影图标"></p>
 
+## 下载
+
+[下载完整 Windows 便携包](https://github.com/chi92856-hash/QingYing/releases/tag/backup-2026-11-14)，附 SHA-256 校验文件。请下载 Release 中的 ZIP，GitHub 自动生成的 Source code 压缩包仅包含源码。
+
 ## 运行
 
 便携版完整解压后运行 `清影.exe`，并保持 `_internal` 与程序位于同一目录。完整运行依赖不放入 Git；仅下载 EXE 不能代替完整便携包。
@@ -46,3 +50,4 @@ python tests/glass_bridge_checks.py
 ## 数据与许可
 
 仓库不含浏览器会话、Cookie、个人设置、历史数据库、待下载任务和用户素材。运行产生的数据保存在本机。第三方组件与许可见 [第三方组件](第三方组件.md) 和 `第三方许可证`；项目自身尚未声明开源许可证。
+
