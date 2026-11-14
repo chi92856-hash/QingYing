@@ -1,0 +1,25 @@
+清影/
+release/
+backups/
+*_data/
+**/settings.json
+**/pending_downloads.json
+**/Cookies*
+**/cookies*.txt
+**/Login Data*
+**/Local State
+.env
+.env.*
+*.pem
+*.key
+*.log
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.exe
+*.zip
+*.tmp
+Thumbs.db

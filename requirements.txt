@@ -1,0 +1,12 @@
+# Versions recorded in the existing Windows distribution; Python 3.10.
+Pillow==12.3.0
+opencv-python-headless==5.0.0.93
+numpy==2.2.6
+requests==2.34.2
+yt-dlp==2026.8.19
+imageio-ffmpeg==0.6.0
+customtkinter==6.0.0
+curl_cffi==0.16.3
+playwright==1.64.0
+pywebview==6.2.1
+pythonnet==3.1.0; sys_platform == "win32"
