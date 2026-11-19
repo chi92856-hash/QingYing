@@ -8,7 +8,7 @@ Windows 素材工作台：链接下载、水印修复、小红书采集、Facebo
 
 ## 下载
 
-[下载完整 Windows 便携包](https://github.com/chi92856-hash/QingYing/releases/tag/backup-2026-11-14)，附 SHA-256 校验文件。请下载 Release 中的 ZIP，GitHub 自动生成的 Source code 压缩包仅包含源码。
+[下载完整 Windows 便携包](https://github.com/chi92856-hash/QingYing/releases/latest)，附 SHA-256 校验文件。请下载 Release 中的 Windows ZIP，GitHub 自动生成的 Source code 压缩包仅包含源码。
 
 ## 运行
 
@@ -31,7 +31,7 @@ python source/app.py --classic
 - 图片和视频框选水印、撤销、清空、图片预览、修复保存。
 - 小红书关键词/话题、模式、排序、翻页、缩略图、勾选保存。
 - Facebook 主页照片/相册/视频/Reels 采集、数量设置与暂停。
-- X 主页/评论图片、登录、预览与勾选下载。
+- X 作品链接批量解析，支持图片和视频、主页和评论采集、预览与勾选下载。
 - 更新检查、本地目录、日志、去重历史与完整原生工具入口。
 
 ## 目录和检查

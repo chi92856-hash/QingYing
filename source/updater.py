@@ -10,7 +10,7 @@ from core import check_cancel
 from network_config import desktop_proxies
 
 
-VERSION = '1.7.2'
+VERSION = '1.7.4'
 REPOSITORY = 'chi92856-hash/qingying'
 RELEASES = f'https://github.com/{REPOSITORY}/releases'
 ASSET_NAME = 'Qingying.exe'

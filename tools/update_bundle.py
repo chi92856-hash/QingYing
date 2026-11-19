@@ -43,6 +43,9 @@ def update_pyz(payload):
     for name, (kind, position, size) in toc.items():
         if name in MODULES:
             source = (ROOT / 'source' / (name + '.py')).read_text('utf-8')
+            if name == 'glass_host':
+                html = (ROOT / 'source' / 'glass_ui.html').read_text('utf-8')
+                source += f'\nBUNDLED_UI = {html!r}\n'
             block = zlib.compress(marshal.dumps(compile(source, name + '.py', 'exec')), 6)
         else:
             block = payload[position:position + size]

@@ -330,7 +330,7 @@ class Downloader:
             owned = not hasattr(self,'x_browser')
             browser = XBrowser(base/'x_data', self.log) if owned else self.x_browser
             try:
-                items = browser.call('scan', url, False, self.event)
+                items = browser.call('scan', url, False, self.event, None, '图片和视频')
                 return Work(items[0].title, [item.asset for item in items], items[0].url)
             finally:
                 if owned:

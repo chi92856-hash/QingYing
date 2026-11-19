@@ -10,9 +10,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'source'))
 from x_support import post_url, profile_url, original_image, tweet_media, XBrowser, XService
 from core import share_urls, social_platform
+from x_support import post_urls
 
 
 def main():
+    urls = post_urls('https://x.com/u/status/1\nhttps://twitter.com/u/status/1/photo/1 https://x.com/u/status/2')
+    assert urls == ['https://x.com/i/status/1', 'https://x.com/i/status/2']
+    batch = XService.__new__(XService)
+    batch.progress = batch.log = lambda *args: None
+    def resolve(url, cancel, publish, mode):
+        if url.endswith('/1'):
+            raise ValueError('unavailable post')
+        return [url]
+    batch.post = resolve
+    assert batch.posts(urls, Event(), lambda items: None, '图片和视频') == ([urls[1]], 1)
     assert post_url('https://twitter.com/user/status/123/photo/1')[1] == '123'
     assert social_platform('https://x.com/u/status/123') == 'X'
     assert profile_url('https://twitter.com/Test_User/media?x=1') == ('https://x.com/Test_User','Test_User')
@@ -44,6 +55,14 @@ def main():
         wait_for_timeout=lambda ms:None, mouse=SimpleNamespace(wheel=lambda *a:None))
     items = worker._scan('https://x.com/u/status/100', True, Event())
     assert {i.identifier for i in items} == {'101_0','103_0'}
+    data['100']['extended_entities'] = {'media':[photo, video]}
+    mixed = worker._scan('https://x.com/u/status/100', False, Event(), mode='图片和视频')
+    assert {item.identifier for item in mixed} == {'100_0','100_1'}
+    assert [item.asset.kind for item in mixed] == ['image','video']
+    videos = worker._scan('https://x.com/u/status/100', False, Event(), mode='视频')
+    assert len(videos) == 1 and videos[0].identifier == '100_1'
+    photos = worker._scan('https://x.com/u/status/100', False, Event(), mode='图片')
+    assert len(photos) == 1 and photos[0].identifier == '100_0'
     worker.tweets = {}; worker.authors = {}
     nodes = {'data': [
         {'rest_id':'201','legacy':{'full_text':'own','extended_entities':{'media':[photo, photo]}},

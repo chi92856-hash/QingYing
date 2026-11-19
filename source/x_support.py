@@ -6,7 +6,8 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, urlencode
 
 from collector import BrowserWorker, Candidate, History
-from core import Asset, Work, Downloader, check_cancel, walk
+from core import Asset, Work, Downloader, check_cancel, walk, share_urls
+from common import Cancelled
 
 
 def post_url(value):
@@ -25,6 +26,17 @@ def profile_url(value):
         raise ValueError('请粘贴 X 用户主页链接，例如 https://x.com/用户名。')
     username = match.group(1)
     return f'https://x.com/{username}', username
+
+
+def post_urls(text):
+    urls = {}
+    for value in share_urls(text):
+        try:
+            url, identifier = post_url(value)
+        except ValueError:
+            raise ValueError('批量解析仅接受 X 帖子链接，请移除主页链接或其他平台链接。') from None
+        urls[identifier] = url
+    return list(urls.values())
 
 
 def original_image(value):
@@ -52,6 +64,21 @@ def tweet_media(tweet):
                     and urlparse(v['url']).hostname == 'video.twimg.com']
             if urls: assets.append(Asset('video', urls, 'X 源视频'))
     return assets
+
+
+def media_allowed(asset, mode):
+    if mode not in ('图片', '视频', '图片和视频'):
+        raise ValueError('请选择图片、视频或图片和视频。')
+    return mode == '图片和视频' or asset.kind == ('image' if mode == '图片' else 'video')
+
+
+def media_thumbnail(tweet, asset):
+    if asset.kind == 'image':
+        return asset.urls[0]
+    for media in (tweet.get('extended_entities') or tweet.get('entities') or {}).get('media', []):
+        if any(v.get('url') == asset.urls[0] for v in (media.get('video_info') or {}).get('variants', [])):
+            return original_image(media.get('media_url_https', ''))
+    return ''
 
 
 class XBrowser(BrowserWorker):
@@ -129,7 +156,7 @@ class XBrowser(BrowserWorker):
         self.embedded.call('show')
         return '已打开 X 帖子。'
 
-    def _scan(self, value, replies, cancel, publish=None):
+    def _scan(self, value, replies, cancel, publish=None, mode='图片'):
         url, root = post_url(value)
         self._ensure()
         self.tweets = {}
@@ -150,11 +177,11 @@ class XBrowser(BrowserWorker):
             for identifier, tweet in list(self.tweets.items()):
                 if identifier not in known or (replies and identifier == root) or (not replies and identifier != root): continue
                 for index, asset in enumerate(tweet_media(tweet)):
-                    if replies and asset.kind != 'image': continue
+                    if not media_allowed(asset, mode): continue
                     key = f'{identifier}_{index}'
                     item = Candidate(key, 'https://x.com/i/status/' + identifier,
                                      tweet.get('full_text', '') or 'X 图片', kind='图片' if asset.kind == 'image' else '视频',
-                                     thumbnail=asset.urls[0] if asset.kind == 'image' else '')
+                                     thumbnail=media_thumbnail(tweet, asset))
                     item.asset = asset
                     items[key] = item
             if publish: publish(list(items.values()))
@@ -166,47 +193,78 @@ class XBrowser(BrowserWorker):
             self.page.mouse.wheel(0, 850 if replies else 0)
         check_cancel(cancel)
         if not items:
-            raise ValueError('未找到可访问的回复图片。请检查内置窗口的登录、验证及帖子权限。' if replies else '未取得帖子原始媒体，请检查登录、帖子权限或稍后重试。')
+            raise ValueError(f'未找到可保存的{mode}。请检查所选类型、内置浏览器登录状态及帖子权限。')
         return list(items.values())[:200]
 
-    def _profile_scan(self, value, cancel, publish=None):
+    def _profile_scan(self, value, cancel, publish=None, resume=False, mode='图片'):
         url, username = profile_url(value)
+        if mode not in ('图片', '视频', '图片和视频'):
+            raise ValueError('请选择图片、视频或图片和视频。')
         self._ensure()
-        self.tweets = {}; self.authors = {}
-        self.profile_posts = set()
         check_cancel(cancel)
-        self.page.goto(url, wait_until='domcontentloaded', timeout=25000)
-        self.log('从 X 主页帖子列表查找图片，自动跳过纯文字和视频帖子。')
+        if resume:
+            if getattr(self, 'profile_username', '') != username.casefold():
+                raise ValueError('请先获取这个主页的图片，再继续采集。')
+            if getattr(self, 'profile_mode', '图片') != mode:
+                raise ValueError('采集类型已改变，请点击获取作品重新采集。')
+            try:
+                _, current_user = profile_url(self.page.url)
+            except ValueError:
+                current_user = ''
+            if current_user.casefold() != username.casefold():
+                raise ValueError('浏览器已离开该主页，请重新获取后再继续采集。')
+        else:
+            self.tweets = {}; self.authors = {}
+            self.profile_posts = set()
+            self.profile_items = {}
+            self.profile_mode = mode
+            self.profile_username = ''
+            self.page.goto(url, wait_until='domcontentloaded', timeout=25000)
+            self.profile_username = username.casefold()
+        self.profile_stop_reason = ''
+        self.log(f'继续向下采集 X 主页{mode}。' if resume else f'从 X 主页帖子列表采集{mode}，自动跳过纯文字帖子。')
         deadline = time.monotonic() + 90
-        items = {}; previous = -1; stagnant = 0
+        items = self.profile_items
+        initial_count = len(items)
+        batch_limit = initial_count + 200
+        previous = -1; stagnant = 0
+        self.profile_stop_reason = '本轮达到 90 秒，可继续采集'
         while time.monotonic() < deadline:
             check_cancel(cancel)
             self.page.wait_for_timeout(600)
             self._gated(self.page)
             for item in self._dom_profile_images(username):
-                if len(items) >= 200: break
+                if mode == '视频': continue
+                if len(items) >= batch_limit: break
                 items[item.identifier] = item
             for identifier, tweet in list(self.tweets.items()):
                 # Require verified authorship: recommendations and reposted users do not qualify.
                 if self.authors.get(identifier) != username.casefold(): continue
                 for index, asset in enumerate(tweet_media(tweet)):
-                    if asset.kind != 'image': continue
+                    if not media_allowed(asset, mode): continue
                     key = f'{identifier}_{index}'
                     item = Candidate(key, 'https://x.com/i/status/' + identifier,
-                                     tweet.get('full_text', '') or 'X 主页图片', author=username, thumbnail=asset.urls[0])
+                                     tweet.get('full_text', '') or 'X 主页作品', author=username,
+                                     kind='图片' if asset.kind == 'image' else '视频', thumbnail=media_thumbnail(tweet, asset))
                     item.asset = asset
                     items[key] = item
-                    if len(items) >= 200: break
-                if len(items) >= 200: break
+                    if len(items) >= batch_limit: break
+                if len(items) >= batch_limit: break
             if publish: publish(list(items.values()))
             current = (len(self.tweets), len(items), len(self.profile_posts))
             stagnant = stagnant + 1 if current == previous else 0
             previous = current
-            if len(items) >= 200 or stagnant >= 10: break
+            if len(items) >= batch_limit:
+                self.profile_stop_reason = '本轮新增 200 项，可继续采集'
+                break
+            if stagnant >= 30:
+                self.profile_stop_reason = '页面约 18 秒未加载新内容，可稍后继续采集'
+                break
             self.page.mouse.wheel(0, 850)
         check_cancel(cancel)
+        self.log(f'本轮新增 {len(items) - initial_count} 项，累计 {len(items)} 项。{self.profile_stop_reason}。')
         if not items:
-            raise ValueError(f'已检查 {len(self.profile_posts)} 条主页帖子，未找到可访问的照片。请检查登录、账号权限或帖子中是否含图片。')
+            raise ValueError(f'已检查 {len(self.profile_posts)} 条主页帖子，未找到可访问的{mode}。请检查登录、账号权限或稍后继续采集。')
         return list(items.values())
 
 
@@ -219,8 +277,29 @@ class XService:
     def close(self): self.browser.shutdown()
     def login(self): return self.browser.call('login')
     def open_note(self, url): return self.browser.call('open_note', url)
-    def search(self, url, cancel, publish): return self.browser.call('scan', url, True, cancel, publish)
-    def profile(self, url, cancel, publish): return self.browser.call('profile_scan', url, cancel, publish)
+    def search(self, url, cancel, publish, mode='图片'): return self.browser.call('scan', url, True, cancel, publish, mode)
+    def post(self, url, cancel, publish, mode='图片和视频'): return self.browser.call('scan', url, False, cancel, publish, mode)
+
+    def posts(self, urls, cancel, publish, mode):
+        items = []
+        failures = []
+        for index, url in enumerate(urls, 1):
+            check_cancel(cancel)
+            self.progress((index - 1) / len(urls) * 100, f'正在解析 X 作品 {index}/{len(urls)}')
+            try:
+                items.extend(self.post(url, cancel, None, mode))
+            except Cancelled:
+                raise
+            except Exception as error:
+                failures.append(index)
+                self.log(f'第 {index} 条 X 作品解析失败：{error}')
+            if items:
+                publish(items)
+        if not items:
+            raise ValueError(f'{len(urls)} 条 X 作品均未解析成功，具体原因见任务日志。')
+        return items, len(failures)
+    def profile(self, url, cancel, publish, mode='图片'): return self.browser.call('profile_scan', url, cancel, publish, False, mode)
+    def profile_next(self, url, cancel, publish, mode='图片'): return self.browser.call('profile_scan', url, cancel, publish, True, mode)
 
     def thumbnails(self, items, callback):
         def fetch():
@@ -254,7 +333,7 @@ class XService:
                     skipped += 1; continue
                 try:
                     files = [downloader.fetch(item.asset, folder, 'X_' + item.identifier, item.url)]
-                    self.history.mark(item, '图片', files)
+                    self.history.mark(item, item.kind, files)
                     saved.append((item, files))
                 except Exception as error:
                     check_cancel(cancel)

@@ -76,3 +76,8 @@ print('PASS: X media and reply checks used installed EXE modules; X selection UI
 import x_sidebar_checks
 x_sidebar_checks.check(next(c for c in app_class.co_consts if isinstance(c, types.CodeType) and c.co_name=='show_page'))
 
+glass_host = load('glass_host')
+assert glass_host.BUNDLED_UI == (ROOT / 'source' / 'glass_ui.html').read_text('utf-8')
+assert '<textarea id="xurl"' in glass_host.BUNDLED_UI
+print('PASS: executable-only updates include the batch link input')
+

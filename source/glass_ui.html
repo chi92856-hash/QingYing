@@ -67,14 +67,15 @@ input[type=text],input[type=number],textarea,select{background:#17171a;border:1p
  <button data-page="edit" onclick="navigate('edit')"><svg aria-hidden="true"><use href="#i-repair"/></svg>水印修复</button>
  <button data-page="collector" onclick="navigate('collector')"><svg aria-hidden="true"><use href="#i-collect"/></svg>小红书采集</button>
  <button data-page="facebook" onclick="navigate('facebook')"><svg aria-hidden="true"><use href="#i-facebook"/></svg>Facebook 主页</button>
- <button data-page="x" onclick="navigate('x')"><svg aria-hidden="true"><use href="#i-photo"/></svg>X 图片采集</button>
+ <button data-page="x" onclick="navigate('x')"><svg aria-hidden="true"><use href="#i-photo"/></svg>X 作品采集</button>
  </nav><div class="sidebar-bottom"><p>文件保存在你的电脑</p><p>清影 1.7.2</p></div></aside>
  <main class="workspace">
  <section class="panel glass">
  <header class="heading"><div class="page-icon"><svg aria-hidden="true"><use id="page-icon" href="#i-facebook"/></svg></div><div><h2 id="page-title">Facebook 主页</h2><p id="page-subtitle">按需保存公开图片与视频</p></div></header>
  <div id="x" class="view" hidden>
- <div class="surface"><div class="form-row"><label for="xurl">主页或帖子</label><div class="field"><input id="xurl" type="text" placeholder="粘贴 X 用户主页或帖子链接"></div></div><div class="form-row"><label for="xsource">采集范围</label><div class="field"><select id="xsource"><option>主页图片</option><option>评论图片</option></select><button onclick="act('x_login')">X 登录</button><button class="primary" onclick="act('x_search')">获取图片</button></div></div></div>
- <div class="toolbar"><label class="allcheck"><input id="xall" type="checkbox" onchange="selectX()">全选</label><span class="spacer"></span><button id="xsave" class="primary" onclick="act('x_download')" disabled>下载所选（0）</button></div><p id="xsummary" class="helper"></p><div id="xresults" class="collector-results"></div><p class="helper">获取后预览并勾选下载；文件保存到链接下载页设置的位置。仅包含本次网页加载的内容。</p>
+ <div class="surface common-folder"><div class="form-row"><label for="x-folder">保存位置</label><div class="field"><input id="x-folder" type="text"><button onclick="act('folder')">更改</button><button onclick="act('open_folder')">打开文件夹</button></div></div></div>
+ <div class="surface"><div class="form-row"><label for="xurl">主页或帖子</label><div class="field"><textarea id="xurl" rows="3" style="width:100%" placeholder="粘贴 X 链接，多条作品可用换行或空格分隔"></textarea></div></div><div class="form-row"><label for="xsource">采集范围</label><div class="field"><select id="xsource" aria-label="采集范围"><option>作品链接</option><option>主页作品</option><option>评论作品</option></select><select id="xmode" aria-label="作品类型"><option>图片</option><option>视频</option><option>图片和视频</option></select><button onclick="act('x_login')">X 登录</button><button class="primary" onclick="act('x_search')">获取作品</button></div></div></div>
+ <div class="toolbar"><label class="allcheck"><input id="xall" type="checkbox" onchange="selectX()">全选</label><span class="spacer"></span><button id="xnext" onclick="act('x_next')" disabled>继续采集</button><button id="xsave" class="primary" onclick="act('x_download')" disabled>下载所选（0）</button></div><p id="xsummary" class="helper"></p><div id="xresults" class="collector-results"></div><p class="helper">获取后预览并勾选下载；文件保存到上方目录，与链接下载共用设置。仅包含网页已加载内容，主页可点击继续采集合并更多结果。</p>
  </div>
  <div id="facebook" class="view" hidden>
  <div class="surface">
@@ -130,15 +131,15 @@ input[type=text],input[type=number],textarea,select{background:#17171a;border:1p
 <script>
 'use strict';
 const $=id=>document.getElementById(id);let state=null,api=null,inflight=false,dirty=new Set(),itemSignature='',image=new Image(),imageKey=null,drawing=false,start=null,dragBox=null,canvasMap=null,toastTimer=null;
-const headings={x:['X 图片采集','从主页帖子与评论中查找图片，预览后勾选保存','photo'],facebook:['Facebook 主页','按需保存公开图片与视频','facebook'],download:['链接下载','把喜欢的作品，清晰地留在本地','link'],collector:['小红书采集','按关键词发现素材，挑选后再保存','collect'],edit:['水印修复','框选水印区域，修复后保存到本地','repair']};
-const textIds=['profile','fbfolder','limit','folder','links','keyword','topic','mode','sort','xurl','xsource'];
-document.querySelectorAll('input,textarea,select').forEach(el=>{el.addEventListener('input',()=>dirty.add(el.id));if(el.id==='collector-folder'||el.id==='editor-folder')el.addEventListener('input',()=>{ $('folder').value=el.value;dirty.add('folder') });});
+const headings={x:['X 作品采集','采集主页与评论中的图片、视频，预览后勾选保存','photo'],facebook:['Facebook 主页','按需保存公开图片与视频','facebook'],download:['链接下载','把喜欢的作品，清晰地留在本地','link'],collector:['小红书采集','按关键词发现素材，挑选后再保存','collect'],edit:['水印修复','框选水印区域，修复后保存到本地','repair']};
+const textIds=['profile','fbfolder','limit','folder','links','keyword','topic','mode','sort','xurl','xsource','xmode'];
+document.querySelectorAll('input,textarea,select').forEach(el=>{el.addEventListener('input',()=>dirty.add(el.id));if(el.id==='collector-folder'||el.id==='editor-folder'||el.id==='x-folder')el.addEventListener('input',()=>{ $('folder').value=el.value;dirty.add('folder') });});
 function currentForm(){let d={};for(const id of textIds)d[id]=$(id).value;d.mute=state&&state.page==='collector'?$('collector-mute').checked:$('mute').checked;d.types={};for(const id of ['photos','albums','videos','reels'])d.types[id]=$(id).checked;d.xselected=[...document.querySelectorAll('.x-check:checked')].map(x=>x.dataset.id);d.selected=[...document.querySelectorAll('.item-check:checked')].map(x=>x.dataset.id);return d}window.currentForm=currentForm;
 function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500)}
 function fill(id,value){if(value===undefined||dirty.has(id)||document.activeElement===$(id))return;let el=$(id);if(el.type==='checkbox')el.checked=!!value;else el.value=String(value)}
 function render(s){
  state=s;$('connection').hidden=true;
- for(const id of textIds)fill(id,s[id]);fill('cookie',s.cookie);fill('mute',s.mute);fill('collector-mute',s.mute);fill('collector-folder',s.folder);fill('editor-folder',s.folder);
+ for(const id of textIds)fill(id,s[id]);fill('cookie',s.cookie);fill('mute',s.mute);fill('collector-mute',s.mute);fill('collector-folder',s.folder);fill('editor-folder',s.folder);fill('x-folder',s.folder);
  if(s.types)for(const id of ['photos','albums','videos','reels'])fill(id,s.types[id]);
  for(const key of Object.keys(headings)){$(key).hidden=key!==s.page;document.querySelector(`[data-page="${key}"]`).classList.toggle('active',key===s.page)}
  const h=headings[s.page];$('page-title').textContent=h[0];$('page-subtitle').textContent=h[1];$('page-icon').setAttribute('href','#i-'+h[2]);
@@ -163,9 +164,9 @@ let xSignature='';
 function renderX(s){
  const items=s.xitems||[];const signature=JSON.stringify(items);
  if(signature!==xSignature){xSignature=signature;$('xresults').replaceChildren();
- if(!items.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='从 X 主页或帖子中获取图片，然后勾选保存。';$('xresults').append(empty)}
- for(const item of items){const row=document.createElement('div');row.className='result';const check=document.createElement('input');check.type='checkbox';check.className='x-check';check.dataset.id=item.id;check.checked=item.selected;check.setAttribute('aria-label','选择 '+item.title);check.onchange=()=>act('save');const thumb=document.createElement(item.thumbnail?'img':'div');if(item.thumbnail){thumb.src=item.thumbnail;thumb.alt='图片预览'}else{thumb.className='thumb';thumb.textContent='图片'}const content=document.createElement('div');const title=document.createElement('h3');title.textContent=item.title;const caption=document.createElement('p');caption.textContent=(item.done?'已下载 / ':'')+(item.author||'X 图片');content.append(title,caption);const open=document.createElement('button');open.textContent='看作品';open.onclick=()=>act('x_open',{id:item.id});row.append(check,thumb,content,open);$('xresults').append(row)}}
- $('xsummary').textContent=s.xsummary||'';document.querySelectorAll('#xresults input,#xresults button').forEach(el=>el.disabled=!!s.busy);const count=items.filter(x=>x.selected).length;$('xsave').textContent='下载所选（'+count+'）';$('xsave').disabled=!!s.busy||!count;$('xall').disabled=!!s.busy||!items.length;$('xall').checked=!!items.length&&count===items.length;
+ if(!items.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='选择作品类型，获取后勾选保存；主页可分批继续采集。';$('xresults').append(empty)}
+ for(const item of items){const row=document.createElement('div');row.className='result';const check=document.createElement('input');check.type='checkbox';check.className='x-check';check.dataset.id=item.id;check.checked=item.selected;check.setAttribute('aria-label','选择 '+item.title);check.onchange=()=>act('save');const thumb=document.createElement(item.thumbnail?'img':'div');if(item.thumbnail){thumb.src=item.thumbnail;thumb.alt='图片预览'}else{thumb.className='thumb';thumb.textContent=item.kind||'图片'}const content=document.createElement('div');const title=document.createElement('h3');title.textContent=item.title;const caption=document.createElement('p');caption.textContent=(item.done?'已下载 / ':'')+(item.kind||'图片')+' / '+(item.author||'X 作品');content.append(title,caption);const open=document.createElement('button');open.textContent='看作品';open.onclick=()=>act('x_open',{id:item.id});row.append(check,thumb,content,open);$('xresults').append(row)}}
+ $('xsummary').textContent=s.xsummary||'';$('xnext').disabled=!!s.busy||!s.x_can_continue;document.querySelectorAll('#xresults input,#xresults button').forEach(el=>el.disabled=!!s.busy);const count=items.filter(x=>x.selected).length;$('xsave').textContent='下载所选（'+count+'）';$('xsave').disabled=!!s.busy||!count;$('xall').disabled=!!s.busy||!items.length;$('xall').checked=!!items.length&&count===items.length;
 }
 function selectX(){document.querySelectorAll('.x-check').forEach(el=>el.checked=$('xall').checked);act('save')}
 async function windowAction(action){if(!api)return;try{await api.window_action(action,action==='close'?currentForm():null)}catch(error){if(action!=='close')toast('窗口操作未完成：'+String(error))}}

@@ -103,8 +103,10 @@ class GlassHost:
             p = a.x_panel
             if 'xurl' in data:
                 p.url.set(str(data['xurl']))
-            if data.get('xsource') in ('主页图片', '评论图片'):
+            if data.get('xsource') in ('作品链接', '主页图片', '评论图片', '主页作品', '评论作品'):
                 p.source.set(data['xsource'])
+            if data.get('xmode') in ('图片', '视频', '图片和视频'):
+                p.mode.set(data['xmode'])
             if 'xselected' in data:
                 chosen = set(data['xselected'])
                 for key, variable in p.selected.items():
@@ -189,11 +191,15 @@ class GlassHost:
             a.cookie.set('')
         elif operation == 'instagram':
             a.instagram_login()
-        elif operation in ('x_login', 'x_search', 'x_download'):
+        elif operation in ('x_login', 'x_search', 'x_next', 'x_download'):
             panel = getattr(a, 'x_panel', None)
             if panel is None:
                 raise ValueError('请先打开 X 图片采集页。')
-            {'x_login': panel.login, 'x_search': panel.search, 'x_download': panel.download}[operation]()
+            actions = {'x_login': panel.login, 'x_search': panel.search, 'x_download': panel.download}
+            if operation == 'x_next':
+                panel.continue_search()
+            else:
+                actions[operation]()
         elif operation == 'x_open':
             panel = getattr(a, 'x_panel', None)
             item = next((item for item in panel.items if item.identifier == data.get('id')), None) if panel else None
@@ -277,9 +283,11 @@ class GlassHost:
                     thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(item.thumbnail_bytes).decode()
                 done = p.service is not None and p.service.history.contains(item.identifier)
                 items.append({'id': item.identifier, 'title': item.title, 'author': item.author,
-                              'thumbnail': thumbnail, 'done': done,
+                              'thumbnail': thumbnail, 'kind': item.kind, 'done': done,
                               'selected': p.selected[item.identifier].get()})
-            state.update(xurl=p.url.get(), xsource=p.source.get(), xsummary=p.summary.get(), xitems=items)
+            state.update(xurl=p.url.get(), xsource=p.source.get(), xmode=p.mode.get(), xsummary=p.summary.get(), xitems=items,
+                         x_can_continue=bool(p.service and getattr(p.service.browser, 'profile_username', ''))
+                         and p.result_source.startswith('主页'))
         if self.page == 'edit':
             image = getattr(a, 'result_image', None) if a.show_result else a.original
             key = id(image) if image is not None else None
@@ -345,7 +353,7 @@ def glass_main():
                     return {'closed': True}
 
     api = API()
-    html = Path(__file__).with_name('glass_ui.html').read_text(encoding='utf-8')
+    html = BUNDLED_UI if getattr(sys, 'frozen', False) else Path(__file__).with_name('glass_ui.html').read_text(encoding='utf-8')
     from updater import VERSION
     window = webview.create_window(f'清影 v{VERSION} · 素材工作台', html=html, js_api=api,
                                    width=1280, height=920, min_size=(1000, 720), background_color='#080809',

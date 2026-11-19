@@ -16,6 +16,7 @@ def main():
                             _selection=lambda: calls.append('selection'),
                             login=lambda: calls.append('login'),
                             search=lambda: calls.append('search'),
+                            continue_search=lambda: calls.append('next'),
                             download=lambda: calls.append('download'))
     app = SimpleNamespace(busy=False, folder=Variable('saved'), mute=Variable(False),
                           facebook_panel=None, collector_panel=None, x_panel=panel)
@@ -29,6 +30,8 @@ def main():
     host.dispatch('x_download', form)
     host.dispatch('x_login', form)
     assert calls[-1] == 'login' and 'search' in calls and 'download' in calls
+    host.dispatch('x_next', form)
+    assert calls[-1] == 'next'
     app.busy = True
     host.apply_form({'xurl': 'must not change', 'xselected': []})
     assert panel.url.get() == form['xurl'] and panel.selected['two'].get()
